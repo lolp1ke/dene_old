@@ -1,6 +1,7 @@
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, rc::Rc};
 
 use ratatui::layout::Rect;
+use rustc_hash::FxHashMap;
 use slotmap::new_key_type;
 
 use crate::{
@@ -20,7 +21,7 @@ pub struct Window {
   pub(crate) bounds: Rect,
 
   #[debug(skip)]
-  action_listeners: HashMap<TypeId, Vec<ActionListener>>,
+  action_listeners: FxHashMap<TypeId, Vec<ActionListener>>,
 
   layout_engine: LayoutEngine,
 }
@@ -34,7 +35,7 @@ impl Window {
       next_pane_id: 1,
 
       bounds: area,
-      action_listeners: HashMap::default(),
+      action_listeners: FxHashMap::default(),
       layout_engine: LayoutEngine::default(),
     }
   }

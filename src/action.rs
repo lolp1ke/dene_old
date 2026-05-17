@@ -4,6 +4,8 @@ use std::{
   fmt::Debug,
 };
 
+use rustc_hash::FxHashMap;
+
 #[macro_export]
 macro_rules! actions {
   (
@@ -118,14 +120,14 @@ struct ActionData {
 pub struct ActionRegistry {
   by_name: HashMap<&'static str, ActionData>,
   names: Vec<&'static str>,
-  names_by_type_id: HashMap<TypeId, &'static str>,
+  names_by_type_id: FxHashMap<TypeId, &'static str>,
 }
 impl ActionRegistry {
   pub fn new() -> Self {
     let mut this = Self {
       by_name: HashMap::default(),
       names: Vec::default(),
-      names_by_type_id: HashMap::default(),
+      names_by_type_id: FxHashMap::default(),
     };
     for builder in inventory::iter::<MacroActionBuilder> {
       let action = (builder.0)();

@@ -1,7 +1,5 @@
 mod async_app;
 
-pub use async_app::*;
-
 use std::{
   any::{Any, TypeId},
   cell::RefCell,
@@ -11,6 +9,7 @@ use std::{
 };
 
 use anyhow::Context as _;
+pub use async_app::*;
 use futures_util::{FutureExt, StreamExt};
 use ratatui::{
   crossterm::event::{self as term_event, EventStream, KeyModifiers},

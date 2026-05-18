@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, rc::Rc};
 
 use ratatui::layout::Rect;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{io::Stdout, sync::OnceLock};
 
 use parking_lot::RwLock;

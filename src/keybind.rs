@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use anyhow::Context as _;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 pub mod action;
 mod app;
 pub mod entity;
@@ -25,8 +27,7 @@ pub(crate) use global::*;
 pub(crate) use keybind::*;
 pub(crate) use layout::*;
 pub(crate) use panel::*;
+pub use ratatui;
 pub(crate) use subscribtion::*;
 pub(crate) use view::*;
 pub(crate) use window::*;
-
-pub use ratatui;

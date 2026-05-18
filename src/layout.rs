@@ -1,4 +1,5 @@
-use ratatui::layout::Rect;
+// SPDX-License-Identifier: Apache-2.0
+
 use taffy::{
   AvailableSpace, Display, FlexDirection, Layout, NodeId, Size, Style,
   TaffyTree, prelude::percent,

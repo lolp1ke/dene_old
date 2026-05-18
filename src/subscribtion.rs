@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use slotmap::{SlotMap, new_key_type};

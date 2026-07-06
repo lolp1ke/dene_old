@@ -11,7 +11,6 @@ use std::{
 };
 
 use anyhow::Context as _;
-pub use async_app::*;
 use futures_util::{FutureExt, StreamExt};
 use ratatui::{
   crossterm::event::{self as term_event, EventStream, KeyModifiers},
@@ -24,12 +23,14 @@ use tokio::sync::mpsc;
 use crate::{
   AnyView, AnyWindowHandle, Entity, EntityId, EntityMap, EventEmitter,
   ForegroundTask, Global, Interactive, Keybind, Keybinds, Keystroke, Panel,
-  PanelNode, Render, SubscribtionSet, Task, Window, WindowConfig, WindowHandle,
-  WindowId,
+  PanelNode, Render, SubscribtionSet, Task, Terminal, Window, WindowConfig,
+  WindowHandle, WindowId,
   action::{self, Action, ActionRegistry},
   executor::{BackgroundExecutor, ForegroundExecutor},
   init_term,
 };
+
+pub use async_app::*;
 
 pub(crate) type GlobalActionListener =
   Rc<dyn 'static + Fn(&dyn Action, &mut App)>;
@@ -68,7 +69,12 @@ impl App {
     foreground_executor: ForegroundExecutor,
     background_executor: BackgroundExecutor,
   ) -> Rc<RefCell<Self>> {
+    // TODO: old one remove
     init_term();
+    // new one keep
+    crate::_TERM
+      .set(parking_lot::RwLock::new(Terminal::init()))
+      .ok();
 
     Rc::new_cyclic(|this| {
       RefCell::new(Self {
@@ -119,11 +125,14 @@ impl App {
 
           // TODO: render only on change detected, like: [`.notify()`]
           _ = tick.tick() => {
-            // let mut windows = std::mem::take(&mut app.borrow_mut().windows);
-            // for window in windows.iter_mut().flat_map(|(_, window)| window) {
-            //   window.render(&mut app.borrow_mut());
-            // }
-            // app.borrow_mut().windows = windows;
+            let mut windows = std::mem::take(&mut app.borrow_mut().windows);
+            for window in windows.iter_mut().flat_map(|(_, window)| window) {
+              // #[expect(deprecated)]
+              // window.render(&mut app.borrow_mut());
+              //
+              window.render_new(&mut app.borrow_mut());
+            }
+            app.borrow_mut().windows = windows;
           }
         }
       }
@@ -134,6 +143,11 @@ impl App {
   }
 
   fn shutdown(&mut self) {
+    if let Some(term) = crate::_TERM.get() {
+      term.read().restore();
+    }
+
+    // TODO: deprecated
     ratatui::restore();
   }
 
@@ -157,13 +171,16 @@ impl App {
         let pane_id = window.next_pane_id();
         window.root = Some(PanelNode::Leaf(Panel {
           id: pane_id,
-          view: root_view.into(),
+          view: root_view.clone().into(),
         }));
         window.active_panel = Some(pane_id);
       };
+      window._root = Some(root_view.into());
 
       // render first frame on creation
-      window.render(cx);
+      // #[expect(deprecated, reason = "will be replaced soon")]
+      // window.render(cx);
+      window.render_new(cx);
 
       cx.windows
         .get_mut(window_id)
@@ -237,7 +254,7 @@ impl App {
 
       tracing::debug!("keystroke: {:?}", keystroke);
       if let Some(active_window) = self.active_window {
-        active_window.update(self, |view, window, cx| {
+        active_window.update(self, |_, window, cx| {
           window.dispatch_keystroke(keystroke, cx);
         })?;
       };
@@ -449,13 +466,17 @@ impl App {
   pub fn load_keybinds(&mut self, keybinds: Keybinds) {
     self.bind_keys(keybinds.0);
   }
-  fn bind_keys<I>(&mut self, keybinds: I)
+  pub fn bind_keys<I>(&mut self, keybinds: I)
   where
     I: IntoIterator<Item = Keybind>,
   {
     let mut lock = self.keybinds.borrow_mut();
     lock.add_bindings(keybinds);
   }
+  pub fn bind_key(&mut self, keybind: Keybind) {
+    self.bind_keys([keybind]);
+  }
+
   pub fn focused<E>(&self, entity: Entity<E>, window: &Window) -> bool {
     let Some(active_panel) = window.active_panel.as_ref() else {
       return false;

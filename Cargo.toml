@@ -49,7 +49,7 @@ futures-util = ["futures-util/alloc"]
 ratatui = ["ratatui/crossterm"]
 rustc-hash = ["rustc-hash/std"]
 serde = ["serde/derive", "serde/std"]
-taffy = ["taffy/taffy_tree", "taffy/flexbox", "taffy/std"]
+taffy = ["taffy/taffy_tree", "taffy/flexbox", "taffy/block_layout", "taffy/grid", "taffy/std"]
 tokio = [
   "tokio/sync",
   "tokio/time",
@@ -84,3 +84,8 @@ unsafe_code = "warn"
 [lints.clippy]
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
+
+
+[[example]]
+name = "hello_world"
+path = "examples/hello_world.rs"

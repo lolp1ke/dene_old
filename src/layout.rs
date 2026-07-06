@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use taffy::{
-  AvailableSpace, Display, FlexDirection, Layout, NodeId, Size, Style,
-  TaffyTree, prelude::percent,
+  AvailableSpace, Display, FlexDirection, Layout, NodeId, Size,
+  Style as TaffyStyle, TaffyTree, prelude::percent,
 };
 
-use crate::{Direction, PanelNode};
+use crate::{AnyElement, Direction, PanelNode};
 
 #[derive(Debug)]
 pub struct LayoutEngine {
@@ -37,6 +37,42 @@ impl LayoutEngine {
       )
       .unwrap();
   }
+
+  pub fn clear(&mut self) {
+    self.taffy.clear();
+  }
+
+  pub(crate) fn build_from_root_element(
+    &mut self,
+    element: &mut AnyElement,
+    width: f32,
+    height: f32,
+  ) -> NodeId {
+    self.taffy.clear();
+    let root_id = self.build_element_node(element);
+    let mut style = self.taffy.style(root_id).unwrap().clone();
+    style.size = taffy::Size::from_lengths(width, height);
+    self.taffy.set_style(root_id, style).unwrap();
+    root_id
+  }
+
+  fn build_element_node(&mut self, element: &mut AnyElement) -> NodeId {
+    let style = element.layout_style();
+    let count = element.child_count();
+
+    if count == 0 {
+      self.taffy.new_leaf(style).unwrap()
+    } else {
+      let child_ids: Vec<NodeId> = (0..count)
+        .map(|i| {
+          let child = element.get_child(i);
+          self.build_element_node(child)
+        })
+        .collect();
+      self.taffy.new_with_children(style, &child_ids).unwrap()
+    }
+  }
+
   pub fn build(&mut self, node: &PanelNode) -> NodeId {
     self.taffy.clear();
     let root_id = self.build_node(node);
@@ -52,7 +88,7 @@ impl LayoutEngine {
     match node {
       PanelNode::Leaf(..) => self
         .taffy
-        .new_leaf(Style {
+        .new_leaf(TaffyStyle {
           display: Display::Flex,
           flex_grow: 1.0,
           flex_shrink: 1.0,
@@ -81,7 +117,7 @@ impl LayoutEngine {
         self
           .taffy
           .new_with_children(
-            Style {
+            TaffyStyle {
               display: Display::Flex,
               flex_direction: match direction {
                 Direction::Horizontal => FlexDirection::Row,

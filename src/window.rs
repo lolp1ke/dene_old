@@ -4,16 +4,24 @@ use std::{
   any::{Any, TypeId},
   marker::PhantomData,
   rc::Rc,
+  sync::OnceLock,
 };
 
-use ratatui::layout::Rect;
+use parking_lot::RwLock;
+use ratatui::layout::Rect as RatRect;
 use rustc_hash::FxHashMap;
 use slotmap::new_key_type;
 
 use crate::{
-  Action, AnyView, App, AppContext, FocusNext, FocusPrev, Keystroke,
-  LayoutEngine, PanelId, PanelNode, clamp_area, draw,
+  Action, AnyView, App, AppContext, FocusNext, FocusPrev, Frame, IntoElement,
+  Keystroke, LayoutEngine, PanelId, PanelNode, Rect, Terminal,
 };
+
+pub(crate) static _TERM: OnceLock<RwLock<Terminal>> = OnceLock::new();
+
+pub(crate) fn get_terminal() -> &'static RwLock<Terminal> {
+  _TERM.get().expect("terminal not initialized")
+}
 
 type ActionListener = Rc<dyn Fn(&dyn Action, &mut Window, &mut App)>;
 
@@ -22,10 +30,15 @@ pub struct Window {
   handle: AnyWindowHandle,
 
   pub root: Option<PanelNode>,
+  pub _root: Option<AnyView>,
   pub active_panel: Option<PanelId>,
   next_pane_id: u32,
-  pub(crate) bounds: Rect,
+  pub(crate) bounds: RatRect,
+  pub(crate) _bounds: Rect,
   pub(crate) dirty: bool,
+
+  pub(crate) prev_frame: Frame,
+  pub(crate) current_frame: Frame,
 
   #[debug(skip)]
   action_listeners: FxHashMap<TypeId, Vec<ActionListener>>,
@@ -51,13 +64,19 @@ impl Window {
         window.focus(-1);
       }));
 
+    let _bounds = Rect::new(0, 0, bounds.width, bounds.height);
+
     Self {
       handle,
       root: None,
+      _root: None,
       active_panel: Some(PanelId(0)),
       next_pane_id: 1,
       bounds,
+      _bounds,
       dirty: false,
+      prev_frame: Frame::new(bounds.width, bounds.height),
+      current_frame: Frame::new(bounds.width, bounds.height),
       action_listeners,
       layout_engine: LayoutEngine::default(),
     }
@@ -69,7 +88,43 @@ impl Window {
     id
   }
 
+  pub(crate) fn render_new(&mut self, cx: &mut App) {
+    let Some(root_view) = self._root.as_ref().cloned() else {
+      return;
+    };
+    let mut root_element = root_view.into_any_element();
+    let mut layout_engine = std::mem::take(&mut self.layout_engine);
+    let mut frame = std::mem::replace(
+      &mut self.current_frame,
+      Frame::new(self.bounds.width, self.bounds.height),
+    );
+
+    frame.clear();
+
+    crate::render_element_with_layout(
+      &mut root_element,
+      &mut layout_engine,
+      self.bounds.width,
+      self.bounds.height,
+      &mut frame,
+      self,
+      cx,
+    );
+
+    self.layout_engine = layout_engine;
+    std::mem::swap(&mut self.prev_frame, &mut self.current_frame);
+    self.current_frame = frame;
+
+    let term = get_terminal();
+    let mut term = term.write();
+    term.flush_diff(&self.prev_frame, &self.current_frame);
+    std::mem::swap(&mut self.prev_frame, &mut self.current_frame);
+  }
+
+  #[deprecated(note = "use render_new instead")]
   pub(crate) fn render(&mut self, cx: &mut App) {
+    use ratatui::layout::Rect as R;
+
     let root_id = self.layout_engine.build(self.root.as_ref().unwrap());
     self.layout_engine.compute(
       root_id,
@@ -88,16 +143,30 @@ impl Window {
       );
       pairs
     };
-
-    draw(move |frame| {
+    #[expect(deprecated, reason = "will be replaced")]
+    crate::draw(move |frame| {
       for (view, area) in views.into_iter() {
         let area = clamp_area(area, self.bounds);
         if area.width == 0 || area.height == 0 {
           continue;
         };
+        #[expect(deprecated, reason = "will be replaced")]
         (view.render)(&view, frame, area, self, cx);
       }
     });
+
+    fn clamp_area(area: R, bounds: R) -> R {
+      let x = area.x.min(bounds.x + bounds.width.saturating_sub(1));
+      let y = area.y.min(bounds.y + bounds.height.saturating_sub(1));
+      let width = area.width.min(bounds.x + bounds.width - x);
+      let height = area.height.min(bounds.y + bounds.height - y);
+      R {
+        x,
+        y,
+        width,
+        height,
+      }
+    }
   }
 
   pub(crate) fn dispatch_action(&mut self, action: &dyn Action, cx: &mut App) {
@@ -135,8 +204,8 @@ impl Window {
     };
 
     if self.dirty {
-      self.render(cx);
-      // self.dirty = false;
+      self.render_new(cx);
+      self.dirty = false;
     };
   }
 
@@ -176,14 +245,14 @@ impl Window {
 
 #[derive(Debug)]
 pub struct WindowConfig {
-  pub bounds: Rect,
+  pub bounds: RatRect,
 }
 impl Default for WindowConfig {
   fn default() -> Self {
-    let (width, height) = ratatui::crossterm::terminal::size().unwrap();
+    let (width, height) = Terminal::size();
 
     Self {
-      bounds: Rect {
+      bounds: RatRect {
         x: 0,
         y: 0,
         width,
@@ -251,4 +320,11 @@ impl<W> Clone for WindowHandle<W> {
   fn clone(&self) -> Self {
     *self
   }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Color {
+  Default,
+  Rgb { r: u16, g: u16, b: u16 },
+  Rgba { r: u16, g: u16, b: u16, a: u16 },
 }

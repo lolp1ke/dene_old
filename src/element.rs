@@ -2,7 +2,7 @@
 
 use std::{any::Any, fmt::Debug};
 
-use crate::{App, Frame, Rect, Window};
+use crate::{App, Frame, Keystroke, Rect, Window};
 
 pub trait IntoElement: Sized {
   type Element: Element;
@@ -134,10 +134,23 @@ impl Debug for dyn ElementObject {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
+pub struct KeyDownEvent {
+  pub keystroke: Keystroke,
+  pub is_held: bool,
+}
+
+type KeyDownListener =
+  Box<dyn 'static + Fn(&KeyDownEvent, &mut Window, &mut App)>;
+
+#[derive(derive_more::Debug)]
 #[derive(Default)]
 pub struct Interactivity {
   pub active: bool,
   pub hovered: bool,
   pub focusable: bool,
   pub base_style: Box<taffy::Style>,
+
+  #[debug(skip)]
+  pub key_down_listeners: Vec<KeyDownListener>,
 }

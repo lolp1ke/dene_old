@@ -32,6 +32,7 @@ pub struct Keybind {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 #[derive(PartialEq)]
 pub struct Keystroke {
   pub(crate) modifiers: Modifiers,
@@ -141,6 +142,7 @@ impl Keystroke {
 }
 bitflags! {
   #[derive(Debug)]
+  #[derive(Clone, Copy)]
   #[derive(PartialEq)]
   pub struct Modifiers: u8 {
     const NONE = 1 << 0;

@@ -1,26 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-  any::{Any, TypeId},
-  marker::PhantomData,
-  rc::Rc,
-  sync::OnceLock,
-};
+use std::{any::TypeId, marker::PhantomData, rc::Rc, sync::OnceLock};
 
 use parking_lot::RwLock;
-use ratatui::layout::Rect as RatRect;
 use rustc_hash::FxHashMap;
 use slotmap::new_key_type;
 
 use crate::{
-  Action, AnyView, App, AppContext, FocusNext, FocusPrev, Frame, IntoElement,
-  Keystroke, LayoutEngine, PanelId, PanelNode, Rect, Terminal,
+  Action, AnyView, App, AppContext, Frame, IntoElement, Keystroke,
+  LayoutEngine, Rect, Terminal,
 };
 
-pub(crate) static _TERM: OnceLock<RwLock<Terminal>> = OnceLock::new();
+pub(crate) static TERM: OnceLock<RwLock<Terminal>> = OnceLock::new();
 
 pub(crate) fn get_terminal() -> &'static RwLock<Terminal> {
-  _TERM.get().expect("terminal not initialized")
+  TERM.get().expect("terminal not initialized")
 }
 
 type ActionListener = Rc<dyn Fn(&dyn Action, &mut Window, &mut App)>;
@@ -29,12 +23,10 @@ type ActionListener = Rc<dyn Fn(&dyn Action, &mut Window, &mut App)>;
 pub struct Window {
   handle: AnyWindowHandle,
 
-  pub root: Option<PanelNode>,
-  pub _root: Option<AnyView>,
-  pub active_panel: Option<PanelId>,
-  next_pane_id: u32,
-  pub(crate) bounds: RatRect,
-  pub(crate) _bounds: Rect,
+  pub root: Option<AnyView>,
+  // pub active_panel: Option<PanelId>,
+  // next_pane_id: u32,
+  pub(crate) bounds: Rect,
   pub(crate) dirty: bool,
 
   pub(crate) prev_frame: Frame,
@@ -49,47 +41,20 @@ impl Window {
   pub(crate) fn new(handle: AnyWindowHandle, config: WindowConfig) -> Self {
     let WindowConfig { bounds, .. } = config;
 
-    let mut action_listeners: FxHashMap<TypeId, Vec<ActionListener>> =
-      FxHashMap::default();
-    action_listeners
-      .entry(FocusNext.type_id())
-      .or_default()
-      .push(Rc::new(move |_, window, _| {
-        window.focus(1);
-      }));
-    action_listeners
-      .entry(FocusPrev.type_id())
-      .or_default()
-      .push(Rc::new(move |_, window, _| {
-        window.focus(-1);
-      }));
-
-    let _bounds = Rect::new(0, 0, bounds.width, bounds.height);
-
     Self {
       handle,
       root: None,
-      _root: None,
-      active_panel: Some(PanelId(0)),
-      next_pane_id: 1,
       bounds,
-      _bounds,
       dirty: false,
       prev_frame: Frame::new(bounds.width, bounds.height),
       current_frame: Frame::new(bounds.width, bounds.height),
-      action_listeners,
+      action_listeners: FxHashMap::default(),
       layout_engine: LayoutEngine::default(),
     }
   }
 
-  pub fn next_pane_id(&mut self) -> PanelId {
-    let id = PanelId(self.next_pane_id);
-    self.next_pane_id += 1;
-    id
-  }
-
-  pub(crate) fn render_new(&mut self, cx: &mut App) {
-    let Some(root_view) = self._root.as_ref().cloned() else {
+  pub(crate) fn render(&mut self, cx: &mut App) {
+    let Some(root_view) = self.root.as_ref().cloned() else {
       return;
     };
     let mut root_element = root_view.into_any_element();
@@ -121,54 +86,6 @@ impl Window {
     std::mem::swap(&mut self.prev_frame, &mut self.current_frame);
   }
 
-  #[deprecated(note = "use render_new instead")]
-  pub(crate) fn render(&mut self, cx: &mut App) {
-    use ratatui::layout::Rect as R;
-
-    let root_id = self.layout_engine.build(self.root.as_ref().unwrap());
-    self.layout_engine.compute(
-      root_id,
-      self.bounds.width as f32,
-      self.bounds.height as f32,
-    );
-
-    let views = {
-      let mut pairs = Vec::new();
-      self.root.as_ref().unwrap().visit_leaves(
-        root_id,
-        &self.layout_engine,
-        self.bounds.x as f32,
-        self.bounds.y as f32,
-        &mut |pane, rect| pairs.push((pane.view.clone(), rect)),
-      );
-      pairs
-    };
-    #[expect(deprecated, reason = "will be replaced")]
-    crate::draw(move |frame| {
-      for (view, area) in views.into_iter() {
-        let area = clamp_area(area, self.bounds);
-        if area.width == 0 || area.height == 0 {
-          continue;
-        };
-        #[expect(deprecated, reason = "will be replaced")]
-        (view.render)(&view, frame, area, self, cx);
-      }
-    });
-
-    fn clamp_area(area: R, bounds: R) -> R {
-      let x = area.x.min(bounds.x + bounds.width.saturating_sub(1));
-      let y = area.y.min(bounds.y + bounds.height.saturating_sub(1));
-      let width = area.width.min(bounds.x + bounds.width - x);
-      let height = area.height.min(bounds.y + bounds.height - y);
-      R {
-        x,
-        y,
-        width,
-        height,
-      }
-    }
-  }
-
   pub(crate) fn dispatch_action(&mut self, action: &dyn Action, cx: &mut App) {
     let action_ty = action.as_any().type_id();
     if let Some(global_listeners) =
@@ -195,16 +112,13 @@ impl Window {
     keystroke: Keystroke,
     cx: &mut App,
   ) {
-    if let Some(node) = self.root.as_ref()
-      && let Some(active_pane) = self.active_panel
-      && let Some(pane) = node.find(active_pane)
-    {
-      let view = pane.view.clone();
+    // TODO: implement focused state for new render logic
+    if let Some(view) = self.root.as_ref().cloned() {
       (view.on_keystroke)(&view, keystroke, self, cx);
     };
 
     if self.dirty {
-      self.render_new(cx);
+      self.render(cx);
       self.dirty = false;
     };
   }
@@ -223,36 +137,18 @@ impl Window {
         f(action, window, cx);
       }));
   }
-
-  pub(crate) fn focus(&mut self, idx: i32) {
-    let Some(root) = self.root.as_ref() else {
-      return;
-    };
-    let order = root.tab_order();
-    if order.is_empty() {
-      return;
-    };
-
-    let current_idx = self
-      .active_panel
-      .and_then(|id| order.iter().position(|p| *p == id))
-      .unwrap_or(0);
-    let focus_idx =
-      ((current_idx as i32) + idx).rem_euclid(order.len() as i32) as usize;
-    self.active_panel = Some(order[focus_idx]);
-  }
 }
 
 #[derive(Debug)]
 pub struct WindowConfig {
-  pub bounds: RatRect,
+  pub bounds: Rect,
 }
 impl Default for WindowConfig {
   fn default() -> Self {
     let (width, height) = Terminal::size();
 
     Self {
-      bounds: RatRect {
+      bounds: Rect {
         x: 0,
         y: 0,
         width,

@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use taffy::{
-  AvailableSpace, Display, FlexDirection, Layout, NodeId, Size,
-  Style as TaffyStyle, TaffyTree, prelude::percent,
-};
+use taffy::{AvailableSpace, Layout, NodeId, Size, TaffyTree};
 
-use crate::{AnyElement, Direction, PanelNode};
+use crate::AnyElement;
 
 #[derive(Debug)]
 pub struct LayoutEngine {
@@ -70,67 +67,6 @@ impl LayoutEngine {
         })
         .collect();
       self.taffy.new_with_children(style, &child_ids).unwrap()
-    }
-  }
-
-  pub fn build(&mut self, node: &PanelNode) -> NodeId {
-    self.taffy.clear();
-    let root_id = self.build_node(node);
-    let mut style = self.taffy.style(root_id).unwrap().clone();
-    style.size = Size {
-      width: percent(1.0),
-      height: percent(1.0),
-    };
-    self.taffy.set_style(root_id, style).unwrap();
-    root_id
-  }
-  fn build_node(&mut self, node: &PanelNode) -> NodeId {
-    match node {
-      PanelNode::Leaf(..) => self
-        .taffy
-        .new_leaf(TaffyStyle {
-          display: Display::Flex,
-          flex_grow: 1.0,
-          flex_shrink: 1.0,
-          ..Default::default()
-        })
-        .unwrap(),
-      PanelNode::Split {
-        direction,
-        children,
-        weights,
-      } => {
-        let total_weight = weights.iter().sum::<f32>();
-        let child_ids = children
-          .iter()
-          .zip(weights.iter())
-          .map(|(child, &weight)| {
-            let id = self.build_node(child);
-            let mut style = self.taffy.style(id).unwrap().clone();
-            style.flex_grow = weight / total_weight;
-            style.flex_shrink = 1.0;
-            self.taffy.set_style(id, style).unwrap();
-            id
-          })
-          .collect::<Vec<_>>();
-
-        self
-          .taffy
-          .new_with_children(
-            TaffyStyle {
-              display: Display::Flex,
-              flex_direction: match direction {
-                Direction::Horizontal => FlexDirection::Row,
-                Direction::Vertical => FlexDirection::Column,
-              },
-              flex_grow: 1.0,
-              flex_shrink: 1.0,
-              ..Default::default()
-            },
-            &child_ids,
-          )
-          .unwrap()
-      }
     }
   }
 }

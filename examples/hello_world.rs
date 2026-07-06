@@ -47,7 +47,7 @@ fn main() {
 
 struct HelloWorld {}
 impl Render for HelloWorld {
-  fn _render(
+  fn render(
     &mut self,
     _window: &mut Window,
     _cx: &mut Context<Self>,

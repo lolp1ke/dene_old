@@ -61,12 +61,12 @@ impl ForegroundExecutor {
     impl<Fut> Drop for Checked<Fut> {
       fn drop(&mut self) {
         // TODO: bruh
-        // assert_eq!(
-        //   self.thread_id,
-        //   thread_id(),
-        //   "task spawned at {}",
-        //   self.location
-        // );
+        let _ = (
+          self.thread_id,
+          thread_id(),
+          "task spawned at {}",
+          self.location,
+        );
 
         #[expect(
           unsafe_code,

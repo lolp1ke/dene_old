@@ -11,23 +11,19 @@ use std::{
 };
 
 use anyhow::Context as _;
+use crossterm::event::{self as term_event, EventStream, KeyModifiers};
 use futures_util::{FutureExt, StreamExt};
-use ratatui::{
-  crossterm::event::{self as term_event, EventStream, KeyModifiers},
-  layout::Size,
-};
 use rustc_hash::FxHashMap;
 use slotmap::SlotMap;
 use tokio::sync::mpsc;
 
 use crate::{
   AnyView, AnyWindowHandle, Entity, EntityId, EntityMap, EventEmitter,
-  ForegroundTask, Global, Interactive, Keybind, Keybinds, Keystroke, Panel,
-  PanelNode, Render, SubscribtionSet, Task, Terminal, Window, WindowConfig,
-  WindowHandle, WindowId,
+  ForegroundTask, Global, Interactive, Keybind, Keybinds, Keystroke, Render,
+  SubscribtionSet, Task, Terminal, Window, WindowConfig, WindowHandle,
+  WindowId,
   action::{self, Action, ActionRegistry},
   executor::{BackgroundExecutor, ForegroundExecutor},
-  init_term,
 };
 
 pub use async_app::*;
@@ -69,10 +65,7 @@ impl App {
     foreground_executor: ForegroundExecutor,
     background_executor: BackgroundExecutor,
   ) -> Rc<RefCell<Self>> {
-    // TODO: old one remove
-    init_term();
-    // new one keep
-    crate::_TERM
+    crate::TERM
       .set(parking_lot::RwLock::new(Terminal::init()))
       .ok();
 
@@ -127,10 +120,10 @@ impl App {
           _ = tick.tick() => {
             let mut windows = std::mem::take(&mut app.borrow_mut().windows);
             for window in windows.iter_mut().flat_map(|(_, window)| window) {
-              // #[expect(deprecated)]
-              // window.render(&mut app.borrow_mut());
-              //
-              window.render_new(&mut app.borrow_mut());
+              if window.dirty {
+                window.render(&mut app.borrow_mut());
+                window.dirty = false;
+              };
             }
             app.borrow_mut().windows = windows;
           }
@@ -143,12 +136,9 @@ impl App {
   }
 
   fn shutdown(&mut self) {
-    if let Some(term) = crate::_TERM.get() {
+    if let Some(term) = crate::TERM.get() {
       term.read().restore();
     }
-
-    // TODO: deprecated
-    ratatui::restore();
   }
 
   pub fn open_window<F, V>(
@@ -167,20 +157,9 @@ impl App {
 
       // build the entity
       let root_view = f(&mut window, cx);
-      if window.root.is_none() {
-        let pane_id = window.next_pane_id();
-        window.root = Some(PanelNode::Leaf(Panel {
-          id: pane_id,
-          view: root_view.clone().into(),
-        }));
-        window.active_panel = Some(pane_id);
-      };
-      window._root = Some(root_view.into());
+      window.root = Some(root_view.into());
 
-      // render first frame on creation
-      // #[expect(deprecated, reason = "will be replaced soon")]
-      // window.render(cx);
-      window.render_new(cx);
+      window.render(cx);
 
       cx.windows
         .get_mut(window_id)
@@ -197,11 +176,7 @@ impl App {
     self
       .update(|cx| {
         let mut window = cx.windows.get_mut(id)?.take()?;
-        let view = window
-          .root
-          .as_ref()?
-          .find(window.active_panel?)
-          .map(|panel| panel.view.clone())?;
+        let view = window.root.as_ref().cloned()?;
 
         let result = f(view, &mut window, cx);
         window.dirty = true;
@@ -270,7 +245,7 @@ impl App {
       term_event::Event::Resize(width, height) => {
         for (_, window) in self.windows.iter_mut() {
           if let Some(window) = window {
-            window.bounds = window.bounds.resize(Size::new(width, height));
+            window.bounds = window.bounds.resize(width, height);
           };
         }
       }
@@ -370,13 +345,6 @@ impl App {
 
   pub fn notify(&mut self, entity_id: EntityId) {
     self.pending_effects.push_back(Effect::Notify { entity_id });
-    // if let Some(active_window) = self.active_window {
-    //   active_window
-    //     .update(self, |_, window, _| {
-    //       // window.dirty = true;
-    //     })
-    //     .expect("window is already gone");
-    // };
   }
 
   pub fn subscribe<E, F, Event>(&mut self, entity: Entity<E>, mut on_event: F)
@@ -475,17 +443,6 @@ impl App {
   }
   pub fn bind_key(&mut self, keybind: Keybind) {
     self.bind_keys([keybind]);
-  }
-
-  pub fn focused<E>(&self, entity: Entity<E>, window: &Window) -> bool {
-    let Some(active_panel) = window.active_panel.as_ref() else {
-      return false;
-    };
-    window
-      .root
-      .as_ref()
-      .and_then(|root| root.find(*active_panel))
-      .is_some_and(|panel| panel.view.entity_id() == entity.entity_id)
   }
 }
 impl AppContext for App {
@@ -589,10 +546,6 @@ impl<'a, E> Context<'a, E> {
     move |e: &A, window: &mut Window, cx: &mut App| {
       view.update(cx, |view, cx| f(view, e, window, cx))
     }
-  }
-
-  pub fn focused(&self, window: &Window) -> bool {
-    (**self).focused(self.entity.clone(), window)
   }
 }
 

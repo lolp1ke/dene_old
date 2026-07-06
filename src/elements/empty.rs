@@ -12,7 +12,7 @@ impl IntoElement for Empty {
   }
 }
 impl Render for Empty {
-  fn _render(
+  fn render(
     &mut self,
     _window: &mut Window,
     _cx: &mut Context<Self>,

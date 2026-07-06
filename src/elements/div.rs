@@ -39,7 +39,6 @@ impl Div {
 
 impl Element for Div {
   fn layout_style(&self) -> taffy::Style {
-    // let mut style: taffy::Style = (&*self.interactivity.base_style).into();
     let mut style = self.interactivity.base_style.clone();
     if !self.children.is_empty() {
       style.display = taffy::Display::Flex;
@@ -73,6 +72,7 @@ impl Element for Div {
 }
 impl IntoElement for Div {
   type Element = Self;
+
   fn into_element(self) -> Self::Element {
     self
   }

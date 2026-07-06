@@ -1,12 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{io::Stdout, sync::OnceLock};
-
-use parking_lot::RwLock;
-use ratatui::{
-  Terminal, crossterm, layout::Rect as RatRect, prelude::CrosstermBackend,
-};
-
 use crate::{
   AnyElement, AnyEntity, App, Context, Element, Empty, Entity, EntityId, Frame,
   IntoElement, Keystroke, LayoutEngine, Rect, Window,
@@ -14,17 +7,7 @@ use crate::{
 
 #[expect(unused_variables, reason = "default noop implementation")]
 pub trait Render: 'static + Sized {
-  #[deprecated(note = "use _render instead")]
   fn render(
-    &mut self,
-    frame: &mut ratatui::Frame,
-    area: RatRect,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) {
-  }
-
-  fn _render(
     &mut self,
     window: &mut Window,
     cx: &mut Context<Self>,
@@ -47,9 +30,7 @@ pub trait Interactive: 'static + Sized {
 #[derive(Clone)]
 pub struct AnyView {
   entity: AnyEntity,
-  #[deprecated(note = "use _render path")]
-  pub render: fn(&Self, &mut ratatui::Frame, RatRect, &mut Window, &mut App),
-  pub _render: fn(&Self, &mut Window, &mut App) -> AnyElement,
+  pub render: fn(&Self, &mut Window, &mut App) -> AnyElement,
   pub on_keystroke: fn(&Self, Keystroke, &mut Window, &mut App),
 }
 impl AnyView {
@@ -71,9 +52,7 @@ where
   fn from(value: Entity<V>) -> Self {
     Self {
       entity: value.into(),
-      #[expect(deprecated, reason = "will be replaced soon")]
       render: render::<V>,
-      _render: _render::<V>,
       on_keystroke: on_keystroke::<V>,
     }
   }
@@ -101,12 +80,12 @@ impl Element for AnyView {
     window: &mut Window,
     cx: &mut App,
   ) {
-    let mut child = (self._render)(self, window, cx);
+    let mut child = (self.render)(self, window, cx);
     let mut engine = LayoutEngine::new();
     let root_id = engine.build_from_root_element(
       &mut child,
-      window._bounds.width as f32,
-      window._bounds.height as f32,
+      window.bounds.width as f32,
+      window.bounds.height as f32,
     );
     engine.compute(root_id, bounds.width as f32, bounds.height as f32);
     render_with_layout(&mut child, root_id, &engine, bounds, frame, window, cx);
@@ -122,21 +101,6 @@ impl IntoElement for AnyView {
 
 fn render<V>(
   any_view: &AnyView,
-  frame: &mut ratatui::Frame,
-  area: RatRect,
-  window: &mut Window,
-  cx: &mut App,
-) where
-  V: 'static + Render,
-{
-  let view = any_view.clone().downcast::<V>().unwrap().clone();
-  view.update(cx, |view, cx| {
-    #[expect(deprecated, reason = "will be replaced soon")]
-    view.render(frame, area, window, cx);
-  });
-}
-fn _render<V>(
-  any_view: &AnyView,
   window: &mut Window,
   cx: &mut App,
 ) -> AnyElement
@@ -144,7 +108,7 @@ where
   V: 'static + Render,
 {
   let view = any_view.clone().downcast::<V>().unwrap().clone();
-  view.update(cx, |view, cx| view._render(window, cx).into_any_element())
+  view.update(cx, |view, cx| view.render(window, cx).into_any_element())
 }
 
 fn on_keystroke<V>(
@@ -211,37 +175,4 @@ fn render_with_layout(
     let child = element.get_child(idx);
     render_with_layout(child, child_id, engine, bounds, frame, window, cx);
   }
-}
-
-static TERM: OnceLock<RwLock<Terminal<CrosstermBackend<Stdout>>>> =
-  OnceLock::new();
-
-#[deprecated(note = "use Terminal")]
-pub(crate) fn init_term() {
-  let term = ratatui::init();
-  crossterm::execute!(
-    std::io::stdout(),
-    crossterm::event::PushKeyboardEnhancementFlags(
-      crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-    )
-  )
-  .unwrap();
-
-  TERM.set(RwLock::new(term)).unwrap();
-}
-
-#[deprecated(note = "use Terminal")]
-pub(crate) fn draw<F, R>(f: F) -> R
-where
-  F: FnOnce(&mut ratatui::Frame) -> R,
-{
-  let terminal = TERM.get().unwrap();
-  let mut terminal = terminal.write();
-  let mut result = None;
-  terminal
-    .draw(|frame| {
-      result = Some(f(frame));
-    })
-    .unwrap();
-  result.unwrap()
 }

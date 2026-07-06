@@ -12,12 +12,13 @@ pub mod geometry;
 pub mod global;
 pub mod keybind;
 pub mod layout;
-pub mod panel;
 pub mod style;
 pub mod subscribtion;
 pub mod terminal;
 pub mod view;
 pub mod window;
+
+#[doc(hidden)]
 pub mod private {
   pub use anyhow;
   pub use inventory;
@@ -36,8 +37,6 @@ pub(crate) use geometry::*;
 pub(crate) use global::*;
 pub(crate) use keybind::*;
 pub(crate) use layout::*;
-pub(crate) use panel::*;
-pub use ratatui;
 pub(crate) use style::*;
 pub(crate) use subscribtion::*;
 pub use terminal::*;

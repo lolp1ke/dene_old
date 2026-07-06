@@ -24,6 +24,15 @@ impl Rect {
     }
   }
 
+  pub fn resize(self, width: u16, height: u16) -> Self {
+    Self {
+      x: self.x,
+      y: self.y,
+      width,
+      height,
+    }
+  }
+
   pub fn contains(&self, x: u16, y: u16) -> bool {
     x >= self.x
       && x < self.x.saturating_add(self.width)

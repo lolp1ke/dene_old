@@ -69,8 +69,8 @@ impl Element for AnyView {
     }
   }
 
-  fn child_count(&self) -> usize {
-    0
+  fn child_count(&self) -> Option<usize> {
+    None
   }
 
   fn render(
@@ -108,7 +108,10 @@ where
   V: 'static + Render,
 {
   let view = any_view.clone().downcast::<V>().unwrap().clone();
-  view.update(cx, |view, cx| view.render(window, cx).into_any_element())
+  view.update(cx, |view, cx| {
+    let a = view.render(window, cx);
+    a.into_any_element()
+  })
 }
 
 fn on_keystroke<V>(
@@ -166,10 +169,7 @@ fn render_with_layout(
     height: layout.size.height.ceil() as u16,
   };
 
-  if element.child_count() == 0 {
-    element.render(bounds, frame, window, cx);
-  };
-
+  element.render(bounds, frame, window, cx);
   let child_ids = engine.children(node_id);
   for (idx, child_id) in child_ids.into_iter().enumerate() {
     let child = element.get_child(idx);

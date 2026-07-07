@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use std::fmt::Debug;
+
 use crate::{Context, Element, IntoElement, Render, Window};
 
+#[derive(Debug)]
 pub struct Empty;
 
 impl Element for Empty {}

@@ -36,7 +36,7 @@ impl<K, C> SubscribtionSet<K, C> {
 impl<K, C> Default for SubscribtionSet<K, C> {
   fn default() -> Self {
     Self {
-      subscribers: Rc::default(),
+      subscribers: Default::default(),
     }
   }
 }

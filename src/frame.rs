@@ -12,7 +12,7 @@ impl Frame {
   pub fn new(width: u16, height: u16) -> Self {
     let len = (width as usize) * (height as usize);
     Self {
-      cells: vec![FrameCell::default(); len],
+      cells: vec![Default::default(); len],
       width,
       height,
     }
@@ -24,7 +24,7 @@ impl Frame {
 
   pub fn clear(&mut self) {
     for cell in &mut self.cells {
-      *cell = FrameCell::default();
+      *cell = Default::default();
     }
   }
 

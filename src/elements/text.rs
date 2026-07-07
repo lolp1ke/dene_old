@@ -31,8 +31,8 @@ impl Element for Text {
     self.style.clone()
   }
 
-  fn child_count(&self) -> usize {
-    0
+  fn child_count(&self) -> Option<usize> {
+    None
   }
 
   fn render(

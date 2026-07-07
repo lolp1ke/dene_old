@@ -19,9 +19,9 @@ use tokio::sync::mpsc;
 
 use crate::{
   AnyView, AnyWindowHandle, Entity, EntityId, EntityMap, EventEmitter,
-  ForegroundTask, Global, Interactive, Keybind, Keybinds, Keystroke, Render,
-  SubscribtionSet, Task, Terminal, Window, WindowConfig, WindowHandle,
-  WindowId,
+  ForegroundTask, Global, Interactive, KeyDownEvent, KeyUpEvent, Keybind,
+  Keybinds, Keystroke, PlatformInput, Render, SubscribtionSet, Task, Terminal,
+  Window, WindowConfig, WindowHandle, WindowId,
   action::{self, Action, ActionRegistry},
   executor::{BackgroundExecutor, ForegroundExecutor},
 };
@@ -75,16 +75,16 @@ impl App {
         quitting: AtomicBool::new(false),
         foreground_executor,
         background_executor,
-        globals_by_type: FxHashMap::default(),
-        actions: Rc::default(),
-        keybinds: Rc::default(),
-        global_action_listeners: FxHashMap::default(),
-        windows: SlotMap::default(),
+        globals_by_type: Default::default(),
+        actions: Default::default(),
+        keybinds: Default::default(),
+        global_action_listeners: Default::default(),
+        windows: Default::default(),
         active_window: None,
-        event_listeners: SubscribtionSet::default(),
-        entities: EntityMap::default(),
+        event_listeners: Default::default(),
+        entities: Default::default(),
         pending_updates: 0,
-        pending_effects: VecDeque::default(),
+        pending_effects: Default::default(),
         flushing_effects: false,
       })
     })
@@ -227,10 +227,27 @@ impl App {
       // TODO: save for second keybind if no action
       //       e.g: cmd+k cmd+l
 
-      tracing::debug!("keystroke: {:?}", keystroke);
+      let platform_input = match key.kind {
+        term_event::KeyEventKind::Press => {
+          PlatformInput::KeyDown(KeyDownEvent {
+            keystroke,
+            is_held: false,
+          })
+        }
+        term_event::KeyEventKind::Repeat => {
+          PlatformInput::KeyDown(KeyDownEvent {
+            keystroke,
+            is_held: true,
+          })
+        }
+        term_event::KeyEventKind::Release => {
+          PlatformInput::KeyUp(KeyUpEvent { keystroke })
+        }
+      };
+
       if let Some(active_window) = self.active_window {
         active_window.update(self, |_, window, cx| {
-          window.dispatch_keystroke(keystroke, cx);
+          window.dispatch_input(platform_input, cx);
         })?;
       };
     };

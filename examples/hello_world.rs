@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dene::{
   App, AppContext, Context,
-  element::IntoElement,
+  element::{InteractiveElement, IntoElement},
   elements::div,
   executor::{BackgroundExecutor, ForegroundExecutor},
   keybind::KeybindsFile,
@@ -50,17 +50,25 @@ impl Render for HelloWorld {
   fn render(
     &mut self,
     _window: &mut Window,
-    _cx: &mut Context<Self>,
+    cx: &mut Context<Self>,
   ) -> impl IntoElement {
     div()
       .flex()
       .flex_col()
       .gap_y(10.0)
-      .child(div().child("text long"))
+      .on_key_down(cx.listener(
+        |_, key_event: &dene::interactive::KeyDownEvent, _, _| {
+          print!("down: {:?};", key_event.keystroke);
+        },
+      ))
+      .on_key_up(cx.listener(
+        |_, key_event: &dene::interactive::KeyUpEvent, _, _| {
+          print!("RELEASED: {:?}", key_event.keystroke.key_char);
+        },
+      ))
+      .child(div().flex().gap_x(5.0).child("t").child("s"))
       .child("world")
       .child("one piece")
-    // .child("hello, world!")
-    // .child("next line")
   }
 }
 impl Interactive for HelloWorld {}

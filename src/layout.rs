@@ -2,7 +2,7 @@
 
 use taffy::{AvailableSpace, Layout, NodeId, Size, TaffyTree};
 
-use crate::AnyElement;
+use crate::{AnyElement, Element};
 
 #[derive(Debug)]
 pub struct LayoutEngine {
@@ -57,17 +57,17 @@ impl LayoutEngine {
     let style = element.layout_style();
     let count = element.child_count();
 
-    if count == 0 {
-      self.taffy.new_leaf(style).unwrap()
-    } else {
-      let child_ids: Vec<NodeId> = (0..count)
-        .map(|i| {
-          let child = element.get_child(i);
-          self.build_element_node(child)
-        })
-        .collect();
-      self.taffy.new_with_children(style, &child_ids).unwrap()
-    }
+    let Some(count) = count else {
+      return self.taffy.new_leaf(style).unwrap();
+    };
+
+    let child_ids = (0..count)
+      .map(|idx| {
+        let child = element.get_child(idx);
+        self.build_element_node(child)
+      })
+      .collect::<Vec<_>>();
+    self.taffy.new_with_children(style, &child_ids).unwrap()
   }
 }
 impl Default for LayoutEngine {

@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{any::TypeId, marker::PhantomData, rc::Rc, sync::OnceLock};
+use std::{
+  any::{Any, TypeId},
+  marker::PhantomData,
+  rc::Rc,
+  sync::OnceLock,
+};
 
 use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
 use slotmap::new_key_type;
 
 use crate::{
-  Action, AnyView, App, AppContext, Frame, IntoElement, Keystroke,
-  LayoutEngine, Rect, Terminal,
+  Action, AnyView, App, AppContext, Frame, IntoElement, KeyEvent, LayoutEngine,
+  PlatformInput, Rect, Terminal,
 };
 
 pub(crate) static TERM: OnceLock<RwLock<Terminal>> = OnceLock::new();
@@ -18,14 +23,14 @@ pub(crate) fn get_terminal() -> &'static RwLock<Terminal> {
 }
 
 type ActionListener = Rc<dyn Fn(&dyn Action, &mut Window, &mut App)>;
+type KeyListener = Rc<dyn Fn(&dyn Any, &mut Window, &mut App)>;
 
 #[derive(derive_more::Debug)]
 pub struct Window {
   handle: AnyWindowHandle,
 
   pub root: Option<AnyView>,
-  // pub active_panel: Option<PanelId>,
-  // next_pane_id: u32,
+
   pub(crate) bounds: Rect,
   pub(crate) dirty: bool,
 
@@ -34,8 +39,10 @@ pub struct Window {
 
   #[debug(skip)]
   action_listeners: FxHashMap<TypeId, Vec<ActionListener>>,
+  #[debug(skip)]
+  key_events: Vec<KeyListener>,
 
-  layout_engine: LayoutEngine,
+  pub(crate) layout_engine: LayoutEngine,
 }
 impl Window {
   pub(crate) fn new(handle: AnyWindowHandle, config: WindowConfig) -> Self {
@@ -48,8 +55,9 @@ impl Window {
       dirty: false,
       prev_frame: Frame::new(bounds.width, bounds.height),
       current_frame: Frame::new(bounds.width, bounds.height),
-      action_listeners: FxHashMap::default(),
-      layout_engine: LayoutEngine::default(),
+      action_listeners: Default::default(),
+      key_events: Default::default(),
+      layout_engine: Default::default(),
     }
   }
 
@@ -107,15 +115,28 @@ impl Window {
       self.action_listeners.insert(action_ty, listeners);
     };
   }
-  pub(crate) fn dispatch_keystroke(
+  pub(crate) fn dispatch_input(
     &mut self,
-    keystroke: Keystroke,
+    platform_input: PlatformInput,
     cx: &mut App,
   ) {
+    let key_events = std::mem::take(&mut self.key_events);
+
+    for listener in key_events.iter() {
+      match platform_input.clone() {
+        PlatformInput::KeyDown(key_event) => {
+          (listener)(&key_event, self, cx);
+        }
+        PlatformInput::KeyUp(key_event) => {
+          (listener)(&key_event, self, cx);
+        }
+      };
+    }
+
     // TODO: implement focused state for new render logic
-    if let Some(view) = self.root.as_ref().cloned() {
-      (view.on_keystroke)(&view, keystroke, self, cx);
-    };
+    // if let Some(view) = self.root.as_ref().cloned() {
+    //   (view.on_keystroke)(&view, keystroke, self, cx);
+    // };
 
     if self.dirty {
       self.render(cx);
@@ -136,6 +157,18 @@ impl Window {
         let action = action.as_any().downcast_ref().expect("wrong action");
         f(action, window, cx);
       }));
+  }
+
+  pub(crate) fn on_key_event<F, Event>(&mut self, listener: F)
+  where
+    F: 'static + Fn(&Event, &mut Window, &mut App),
+    Event: KeyEvent,
+  {
+    self.key_events.push(Rc::new(move |key_event, window, cx| {
+      if let Some(key_event) = key_event.downcast_ref::<Event>() {
+        (listener)(key_event, window, cx);
+      };
+    }));
   }
 }
 

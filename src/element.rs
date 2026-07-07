@@ -2,9 +2,9 @@
 
 use std::{any::Any, fmt::Debug};
 
-use crate::{App, Frame, Keystroke, Rect, Window};
+use crate::{App, Frame, KeyDownEvent, KeyUpEvent, Rect, Window};
 
-pub trait IntoElement: Sized {
+pub trait IntoElement: Sized + Debug {
   type Element: Element;
 
   fn into_element(self) -> Self::Element;
@@ -14,10 +14,10 @@ pub trait IntoElement: Sized {
 }
 pub trait Element: 'static + IntoElement {
   fn layout_style(&self) -> taffy::Style {
-    taffy::Style::default()
+    Default::default()
   }
-  fn child_count(&self) -> usize {
-    0
+  fn child_count(&self) -> Option<usize> {
+    None
   }
   fn get_child(&mut self, _index: usize) -> &mut AnyElement {
     panic!("no children");
@@ -42,16 +42,42 @@ pub trait Element: 'static + IntoElement {
 #[derive(Debug)]
 pub struct AnyElement(pub Box<dyn ElementObject>);
 impl AnyElement {
-  pub fn layout_style(&self) -> taffy::Style {
+  pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
+  where
+    T: 'static,
+  {
+    self.0.as_any_mut().downcast_mut::<T>()
+  }
+  // pub fn layout_style(&self) -> taffy::Style {
+  //   self.0.layout_style()
+  // }
+  // pub fn child_count(&self) -> usize {
+  //   self.0.child_count()
+  // }
+  // pub fn get_child(&mut self, index: usize) -> &mut AnyElement {
+  //   self.0.get_child(index)
+  // }
+  // pub fn render(
+  //   &mut self,
+  //   bounds: Rect,
+  //   frame: &mut Frame,
+  //   window: &mut Window,
+  //   cx: &mut App,
+  // ) {
+  //   self.0.render(bounds, frame, window, cx);
+  // }
+}
+impl Element for AnyElement {
+  fn layout_style(&self) -> taffy::Style {
     self.0.layout_style()
   }
-  pub fn child_count(&self) -> usize {
+  fn child_count(&self) -> Option<usize> {
     self.0.child_count()
   }
-  pub fn get_child(&mut self, index: usize) -> &mut AnyElement {
+  fn get_child(&mut self, index: usize) -> &mut AnyElement {
     self.0.get_child(index)
   }
-  pub fn render(
+  fn render(
     &mut self,
     bounds: Rect,
     frame: &mut Frame,
@@ -59,6 +85,12 @@ impl AnyElement {
     cx: &mut App,
   ) {
     self.0.render(bounds, frame, window, cx);
+  }
+}
+impl IntoElement for AnyElement {
+  type Element = Self;
+  fn into_element(self) -> Self::Element {
+    self
   }
 }
 
@@ -88,7 +120,7 @@ where
   fn layout_style(&self) -> taffy::Style {
     self.element.layout_style()
   }
-  fn child_count(&self) -> usize {
+  fn child_count(&self) -> Option<usize> {
     self.element.child_count()
   }
   fn get_child(&mut self, index: usize) -> &mut AnyElement {
@@ -109,13 +141,13 @@ pub trait ElementObject {
   fn as_any_mut(&mut self) -> &mut dyn Any;
 
   fn layout_style(&self) -> taffy::Style {
-    taffy::Style::default()
+    Default::default()
   }
-  fn child_count(&self) -> usize {
-    0
+  fn child_count(&self) -> Option<usize> {
+    None
   }
   fn get_child(&mut self, _index: usize) -> &mut AnyElement {
-    assert_eq!(self.child_count(), 0);
+    assert_eq!(self.child_count(), None);
     unreachable!("leaf should be created");
   }
   fn render(
@@ -133,15 +165,36 @@ impl Debug for dyn ElementObject {
   }
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
-pub struct KeyDownEvent {
-  pub keystroke: Keystroke,
-  pub is_held: bool,
+pub trait InteractiveElement: Sized {
+  fn interactivity(&mut self) -> &mut Interactivity;
+
+  fn on_key_down<F>(mut self, listener: F) -> Self
+  where
+    F: 'static + Fn(&KeyDownEvent, &mut Window, &mut App),
+  {
+    self
+      .interactivity()
+      .key_down_listeners
+      .push(Box::new(listener));
+    self
+  }
+
+  fn on_key_up<F>(mut self, listener: F) -> Self
+  where
+    F: 'static + Fn(&KeyUpEvent, &mut Window, &mut App),
+  {
+    self
+      .interactivity()
+      .key_up_listeners
+      .push(Box::new(listener));
+    self
+  }
 }
 
 type KeyDownListener =
   Box<dyn 'static + Fn(&KeyDownEvent, &mut Window, &mut App)>;
+
+type KeyUpListener = Box<dyn 'static + Fn(&KeyUpEvent, &mut Window, &mut App)>;
 
 #[derive(derive_more::Debug)]
 #[derive(Default)]
@@ -149,8 +202,33 @@ pub struct Interactivity {
   pub active: bool,
   pub hovered: bool,
   pub focusable: bool,
+
+  #[debug(skip)]
   pub base_style: Box<taffy::Style>,
 
   #[debug(skip)]
   pub key_down_listeners: Vec<KeyDownListener>,
+  #[debug(skip)]
+  pub key_up_listeners: Vec<KeyUpListener>,
+}
+impl Interactivity {
+  pub(crate) fn apply_keyboard_listeners(
+    &mut self,
+    window: &mut Window,
+    _cx: &mut App,
+  ) {
+    let key_down_listeners = std::mem::take(&mut self.key_down_listeners);
+    for listener in key_down_listeners.into_iter() {
+      window.on_key_event(move |event: &KeyDownEvent, window, cx| {
+        (listener)(event, window, cx);
+      });
+    }
+
+    let key_up_listeners = std::mem::take(&mut self.key_up_listeners);
+    for listener in key_up_listeners.into_iter() {
+      window.on_key_event(move |event: &KeyUpEvent, window, cx| {
+        (listener)(event, window, cx);
+      });
+    }
+  }
 }

@@ -132,9 +132,9 @@ pub struct ActionRegistry {
 impl ActionRegistry {
   pub fn new() -> Self {
     let mut this = Self {
-      by_name: HashMap::default(),
-      names: Vec::default(),
-      names_by_type_id: FxHashMap::default(),
+      by_name: Default::default(),
+      names: Default::default(),
+      names_by_type_id: Default::default(),
     };
     for builder in inventory::iter::<MacroActionBuilder> {
       let action = (builder.0)();

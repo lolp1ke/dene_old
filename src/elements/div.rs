@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-  AnyElement, App, Element, Frame, Interactivity, IntoElement, Rect, Styled,
-  Window,
+  AnyElement, App, Element, Frame, InteractiveElement, Interactivity,
+  IntoElement, Rect, Styled, Window,
 };
 
 #[derive(Debug)]
@@ -14,6 +14,11 @@ pub struct Div {
 impl Styled for Div {
   fn style(&mut self) -> &mut taffy::Style {
     &mut self.interactivity.base_style
+  }
+}
+impl InteractiveElement for Div {
+  fn interactivity(&mut self) -> &mut Interactivity {
+    &mut self.interactivity
   }
 }
 
@@ -46,8 +51,8 @@ impl Element for Div {
     *style
   }
 
-  fn child_count(&self) -> usize {
-    self.children.len()
+  fn child_count(&self) -> Option<usize> {
+    Some(self.children.len())
   }
 
   fn get_child(&mut self, index: usize) -> &mut AnyElement {
@@ -65,9 +70,10 @@ impl Element for Div {
       return;
     }
 
-    for child in &mut self.children {
-      child.render(bounds, frame, window, cx);
-    }
+    self.interactivity.apply_keyboard_listeners(window, cx);
+    // for child in self.children.iter_mut() {
+    //   child.render(bounds, frame, window, cx);
+    // }
   }
 }
 impl IntoElement for Div {

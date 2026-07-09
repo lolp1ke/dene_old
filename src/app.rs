@@ -61,16 +61,16 @@ impl Application {
     }
   }
 
-  pub fn run<F, R>(mut self, f: F)
+  pub fn run<F, R>(mut self, f: F) -> R
   where
     F: FnOnce(&mut App) -> R,
   {
     let rx = self.rx.take().unwrap();
     let cx = self.app.clone();
 
-    self.rt.block_on(async move {
-      _ = App::run(cx, rx, f).await;
-    });
+    self
+      .rt
+      .block_on(async move { App::run(cx, rx, f).await.unwrap() })
   }
 }
 impl Default for Application {

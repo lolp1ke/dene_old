@@ -9,10 +9,11 @@ use anyhow::Context as _;
 
 use crate::{
   AnyView, AnyWindowHandle, App, AppContext, BackgroundExecutor, Context,
-  Entity, ForegroundExecutor, Window,
+  Entity, ForegroundExecutor, Global, Task, Window,
 };
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct AsyncApp {
   pub(crate) app: rc::Weak<RefCell<App>>,
   pub(crate) foreground_executor: ForegroundExecutor,
@@ -25,6 +26,17 @@ impl AsyncApp {
       .upgrade()
       .context("app already been dropped")
       .unwrap()
+  }
+
+  pub fn spawn<AsyncFn, R>(&self, f: AsyncFn) -> Task<R>
+  where
+    AsyncFn: 'static + AsyncFnOnce(&mut Self) -> R,
+    R: 'static,
+  {
+    let mut cx = self.clone();
+    self
+      .foreground_executor
+      .spawn(async move { f(&mut cx).await })
   }
 }
 impl AppContext for AsyncApp {

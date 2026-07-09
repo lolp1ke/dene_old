@@ -177,43 +177,43 @@ pub trait Styled: Sized {
     self
   }
 
-  fn justify_content_none(mut self) -> Self {
+  fn justify_none(mut self) -> Self {
     self.style().justify_content = None;
     self
   }
-  fn justify_content_start(mut self) -> Self {
+  fn justify_start(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::Start);
     self
   }
-  fn justify_content_end(mut self) -> Self {
+  fn justify_end(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::End);
     self
   }
-  fn justify_content_flex_start(mut self) -> Self {
+  fn justify_flex_start(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::FlexStart);
     self
   }
-  fn justify_content_flex_end(mut self) -> Self {
+  fn justify_flex_end(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::FlexEnd);
     self
   }
-  fn justify_content_center(mut self) -> Self {
+  fn justify_center(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::Center);
     self
   }
-  fn justify_content_stretch(mut self) -> Self {
+  fn justify_stretch(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::Stretch);
     self
   }
-  fn justify_content_space_between(mut self) -> Self {
+  fn justify_space_between(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::SpaceBetween);
     self
   }
-  fn justify_content_space_evenly(mut self) -> Self {
+  fn justify_space_evenly(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::SpaceEvenly);
     self
   }
-  fn justify_content_space_around(mut self) -> Self {
+  fn justify_space_around(mut self) -> Self {
     self.style().justify_content = Some(taffy::AlignContent::SpaceAround);
     self
   }

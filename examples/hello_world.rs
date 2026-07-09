@@ -7,7 +7,7 @@ use dene::{
   executor::{BackgroundExecutor, ForegroundExecutor},
   keybind::KeybindsFile,
   style::Styled,
-  view::{Interactive, Render},
+  view::Render,
   window::Window,
 };
 use tokio::sync::mpsc;
@@ -81,4 +81,3 @@ impl Render for HelloWorld {
       .child("one piece")
   }
 }
-impl Interactive for HelloWorld {}

@@ -9,7 +9,7 @@ use anyhow::Context as _;
 
 use crate::{
   AnyView, AnyWindowHandle, App, AppContext, BackgroundExecutor, Context,
-  Entity, ForegroundExecutor, Global, Task, Window,
+  Entity, ForegroundExecutor, Task, Window,
 };
 
 #[derive(Debug)]

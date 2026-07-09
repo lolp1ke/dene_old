@@ -22,9 +22,9 @@ use tokio::sync::mpsc;
 
 use crate::{
   AnyView, AnyWindowHandle, Entity, EntityId, EntityMap, EventEmitter,
-  ForegroundTask, Global, Interactive, KeyDownEvent, KeyUpEvent, Keybind,
-  Keybinds, Keystroke, PlatformInput, Render, SubscribtionSet, Task, Terminal,
-  Window, WindowConfig, WindowHandle, WindowId,
+  ForegroundTask, Global, KeyDownEvent, KeyUpEvent, Keybind, Keybinds,
+  Keystroke, PlatformInput, Render, SubscribtionSet, Task, Terminal, Window,
+  WindowConfig, WindowHandle, WindowId,
   action::{self, Action, ActionRegistry},
   executor::{BackgroundExecutor, ForegroundExecutor},
 };
@@ -194,7 +194,7 @@ impl App {
   ) -> WindowHandle<V>
   where
     F: 'static + FnOnce(&mut Window, &mut Self) -> Entity<V>,
-    V: 'static + Render + Interactive,
+    V: 'static + Render,
   {
     self.update(|cx| {
       let window_id = cx.windows.insert(None);

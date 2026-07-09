@@ -2,7 +2,7 @@
 
 use crate::{
   AnyElement, AnyEntity, App, Context, Element, Empty, Entity, EntityId, Frame,
-  IntoElement, Keystroke, LayoutEngine, Rect, Window,
+  IntoElement, LayoutEngine, Rect, Window,
 };
 
 #[expect(unused_variables, reason = "default noop implementation")]
@@ -15,23 +15,12 @@ pub trait Render: 'static + Sized {
     Empty
   }
 }
-#[expect(unused_variables, reason = "default noop implementation")]
-pub trait Interactive: 'static + Sized {
-  fn on_keystroke(
-    &mut self,
-    keystroke: Keystroke,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-  ) {
-  }
-}
 
 #[derive(Debug)]
 #[derive(Clone)]
 pub struct AnyView {
   entity: AnyEntity,
   pub render: fn(&Self, &mut Window, &mut App) -> AnyElement,
-  pub on_keystroke: fn(&Self, Keystroke, &mut Window, &mut App),
 }
 impl AnyView {
   pub fn downcast<E>(self) -> Option<Entity<E>>
@@ -47,13 +36,12 @@ impl AnyView {
 }
 impl<V> From<Entity<V>> for AnyView
 where
-  V: Render + Interactive,
+  V: Render,
 {
   fn from(value: Entity<V>) -> Self {
     Self {
       entity: value.into(),
       render: render::<V>,
-      on_keystroke: on_keystroke::<V>,
     }
   }
 }
@@ -112,18 +100,6 @@ where
     let a = view.render(window, cx);
     a.into_any_element()
   })
-}
-
-fn on_keystroke<V>(
-  any_view: &AnyView,
-  keystroke: Keystroke,
-  window: &mut Window,
-  cx: &mut App,
-) where
-  V: 'static + Interactive,
-{
-  let view = any_view.clone().downcast::<V>().unwrap();
-  view.update(cx, |view, cx| view.on_keystroke(keystroke, window, cx));
 }
 
 pub(crate) fn render_element_with_layout(

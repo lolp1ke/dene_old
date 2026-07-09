@@ -7,7 +7,10 @@ use std::{
   cell::RefCell,
   collections::VecDeque,
   rc::{self, Rc},
-  sync::atomic::{self, AtomicBool},
+  sync::{
+    Arc,
+    atomic::{self, AtomicBool},
+  },
 };
 
 use anyhow::Context as _;
@@ -32,6 +35,49 @@ pub(crate) type GlobalActionListener =
   Rc<dyn 'static + Fn(&dyn Action, &mut App)>;
 pub(crate) type EventListener =
   Box<dyn 'static + FnMut(&dyn Any, &mut App) -> bool>;
+
+pub struct Application {
+  app: Rc<RefCell<App>>,
+  rt: tokio::runtime::Runtime,
+  rx: Option<tokio::sync::mpsc::UnboundedReceiver<Box<dyn 'static + FnOnce()>>>,
+}
+impl Application {
+  pub fn new() -> Self {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+      .enable_all()
+      .build()
+      .unwrap();
+
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let foreground_executor = ForegroundExecutor::new(tx);
+    let dispatcher = Arc::new(rt.handle().clone());
+    let background_executor = BackgroundExecutor::new(dispatcher);
+
+    Self {
+      app: App::new(foreground_executor, background_executor),
+      rt,
+      rx: Some(rx),
+    }
+  }
+
+  pub fn run<F, R>(mut self, f: F)
+  where
+    F: FnOnce(&mut App) -> R,
+  {
+    let rx = self.rx.take().unwrap();
+    let cx = self.app.clone();
+
+    self.rt.block_on(async move {
+      _ = App::run(cx, rx, f).await;
+    });
+  }
+}
+impl Default for Application {
+  fn default() -> Self {
+    Self::new()
+  }
+}
 
 #[derive(derive_more::Debug)]
 pub struct App {

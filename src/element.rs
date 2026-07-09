@@ -178,7 +178,6 @@ pub trait InteractiveElement: Sized {
       .push(Box::new(listener));
     self
   }
-
   fn on_key_up<F>(mut self, listener: F) -> Self
   where
     F: 'static + Fn(&KeyUpEvent, &mut Window, &mut App),
@@ -187,6 +186,17 @@ pub trait InteractiveElement: Sized {
       .interactivity()
       .key_up_listeners
       .push(Box::new(listener));
+    self
+  }
+
+  fn tab_index(mut self, tab_index: u32) -> Self {
+    self.interactivity().focusable = true;
+    self.interactivity().tab_stop = true;
+    self.interactivity().tab_index = Some(tab_index);
+    self
+  }
+  fn tab_stop(mut self, tab_stop: bool) -> Self {
+    self.interactivity().tab_stop = tab_stop;
     self
   }
 }
@@ -205,6 +215,9 @@ pub struct Interactivity {
 
   #[debug(skip)]
   pub base_style: Box<taffy::Style>,
+
+  pub tab_index: Option<u32>,
+  pub tab_stop: bool,
 
   #[debug(skip)]
   pub key_down_listeners: Vec<KeyDownListener>,

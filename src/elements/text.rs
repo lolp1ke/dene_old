@@ -12,9 +12,14 @@ impl Text {
   pub fn new(text: impl Into<String>) -> Self {
     let text = text.into();
     let mut style = taffy::Style::DEFAULT;
+    let height = text.lines().count() as f32;
     style.size = taffy::Size {
       width: taffy::Dimension::length(text.len() as f32),
-      height: taffy::Dimension::length(text.lines().count() as f32),
+      height: taffy::Dimension::length(height),
+    };
+    style.min_size = taffy::Size {
+      width: taffy::Dimension::length(0.),
+      height: taffy::Dimension::length(height),
     };
 
     Self { text, style }

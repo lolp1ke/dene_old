@@ -22,9 +22,9 @@ use tokio::sync::mpsc;
 
 use crate::{
   AnyView, AnyWindowHandle, Entity, EntityId, EntityMap, EventEmitter,
-  ForegroundTask, Global, KeyDownEvent, KeyUpEvent, Keybind, Keybinds,
-  Keystroke, PlatformInput, Render, SubscribtionSet, Task, Terminal, Window,
-  WindowConfig, WindowHandle, WindowId,
+  FocusMap, ForegroundTask, Global, KeyDownEvent, KeyUpEvent, Keybind,
+  Keybinds, Keystroke, PlatformInput, Render, SubscribtionSet, Task, Terminal,
+  Window, WindowConfig, WindowHandle, WindowId,
   action::{self, Action, ActionRegistry},
   executor::{BackgroundExecutor, ForegroundExecutor},
 };
@@ -90,11 +90,12 @@ pub struct App {
   globals_by_type: FxHashMap<TypeId, Box<dyn Any>>,
 
   pub(crate) actions: Rc<ActionRegistry>,
-  keybinds: Rc<RefCell<Keybinds>>,
+  pub(crate) keybinds: Rc<RefCell<Keybinds>>,
   #[debug(skip)]
   pub(crate) global_action_listeners:
     FxHashMap<TypeId, Vec<GlobalActionListener>>,
 
+  pub(crate) focus_map: Arc<FocusMap>,
   windows: SlotMap<WindowId, Option<Box<Window>>>,
   active_window: Option<AnyWindowHandle>,
   #[debug(skip)]
@@ -107,7 +108,7 @@ pub struct App {
   flushing_effects: bool,
 }
 impl App {
-  pub fn new(
+  pub(crate) fn new(
     foreground_executor: ForegroundExecutor,
     background_executor: BackgroundExecutor,
   ) -> Rc<RefCell<Self>> {
@@ -125,6 +126,7 @@ impl App {
         actions: Default::default(),
         keybinds: Default::default(),
         global_action_listeners: Default::default(),
+        focus_map: Default::default(),
         windows: Default::default(),
         active_window: None,
         event_listeners: Default::default(),
@@ -135,7 +137,7 @@ impl App {
       })
     })
   }
-  pub fn run<F, R>(
+  pub(crate) fn run<F, R>(
     app: Rc<RefCell<Self>>,
     mut foreground_rx: mpsc::UnboundedReceiver<ForegroundTask>,
     f: F,
@@ -199,7 +201,7 @@ impl App {
     self.update(|cx| {
       let window_id = cx.windows.insert(None);
       let handle = WindowHandle::new(window_id);
-      let mut window = Window::new(handle.into(), window_config);
+      let mut window = Window::new(handle.into(), window_config, cx);
 
       // build the entity
       let root_view = f(&mut window, cx);
@@ -261,39 +263,53 @@ impl App {
     };
 
     if let Ok(keystroke) = Keystroke::parse(&keystroke) {
-      let keybinds = self.keybinds.clone();
-
-      for keybind in keybinds.borrow().iter() {
-        if let Some(keystroke1) = keybind.keystrokes.first()
-          && *keystroke1 == keystroke
-        {
-          self.dispatch_action(&*keybind.action);
-        };
-      }
-      // TODO: save for second keybind if no action
-      //       e.g: cmd+k cmd+l
+      // if let Some(active_window) = self.active_window {
+      //   active_window.update(self, |_, window, cx| {
+      //      window.dispatch_keystroke(keystroke.clone(), cx);
+      //   })?;
+      // };
 
       let platform_input = match key.kind {
         term_event::KeyEventKind::Press => {
           PlatformInput::KeyDown(KeyDownEvent {
-            keystroke,
+            keystroke: keystroke.clone(),
             is_held: false,
           })
         }
         term_event::KeyEventKind::Repeat => {
           PlatformInput::KeyDown(KeyDownEvent {
-            keystroke,
+            keystroke: keystroke.clone(),
             is_held: true,
           })
         }
-        term_event::KeyEventKind::Release => {
-          PlatformInput::KeyUp(KeyUpEvent { keystroke })
-        }
+        term_event::KeyEventKind::Release => PlatformInput::KeyUp(KeyUpEvent {
+          keystroke: keystroke.clone(),
+        }),
       };
-
       if let Some(active_window) = self.active_window {
         active_window.update(self, |_, window, cx| {
           window.dispatch_input(platform_input, cx);
+
+          let keybinds = cx.keybinds.clone();
+
+          for keybind in keybinds.borrow().iter() {
+            if let Some(keystroke1) = keybind.keystrokes.first()
+              && *keystroke1 == keystroke
+              && let Some(global_action_listeners) = cx
+                .global_action_listeners
+                .remove(&keybind.action.as_any().type_id())
+            {
+              let action = &*keybind.action;
+              for listener in global_action_listeners.iter() {
+                (listener)(action, cx);
+              }
+
+              cx.global_action_listeners.insert(
+                keybind.action.as_any().type_id(),
+                global_action_listeners,
+              );
+            };
+          }
         })?;
       };
     };
@@ -332,28 +348,6 @@ impl App {
         (listener)(action, cx);
       }));
   }
-  fn dispatch_action(&mut self, action: &dyn Action) {
-    if let Some(active_window) = self.active_window {
-      if let Err(err) = active_window.update(self, |_, window, cx| {
-        window.dispatch_action(action, cx);
-      }) {
-        tracing::warn!("window update error: {:?}", err)
-      };
-    } else {
-      self.dispatch_global_action_listener(action);
-    };
-  }
-  fn dispatch_global_action_listener(&mut self, action: &dyn Action) {
-    let action_ty = action.type_id();
-    if let Some(listeners) = self.global_action_listeners.remove(&action_ty) {
-      for listener in listeners.iter() {
-        (listener)(action, self)
-      }
-
-      self.global_action_listeners.insert(action_ty, listeners);
-    };
-  }
-
   fn update<F, R>(&mut self, f: F) -> R
   where
     F: FnOnce(&mut Self) -> R,

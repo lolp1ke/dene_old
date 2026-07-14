@@ -142,10 +142,12 @@ fn render_with_layout(
     x: parent_bounds.x + layout.location.x as u16,
     y: parent_bounds.y + layout.location.y as u16,
     width: layout.size.width.ceil() as u16,
-    height: layout.size.height.ceil() as u16,
+    height: (layout.size.height.ceil() as u16),
   };
-
+  frame.dispatch_tree.push_node();
   element.render(bounds, frame, window, cx);
+  frame.dispatch_tree.pop_node();
+
   let child_ids = engine.children(node_id);
   for (idx, child_id) in child_ids.into_iter().enumerate() {
     let child = element.get_child(idx);

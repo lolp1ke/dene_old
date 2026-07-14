@@ -120,17 +120,17 @@ type ActionBuilder = fn(toml::Value) -> anyhow::Result<Box<dyn Action>>;
 
 #[derive(Debug)]
 struct ActionData {
-  pub build: ActionBuilder,
+  pub(crate) build: ActionBuilder,
 }
 
 #[derive(Debug)]
-pub struct ActionRegistry {
+pub(crate) struct ActionRegistry {
   by_name: HashMap<&'static str, ActionData>,
   names: Vec<&'static str>,
   names_by_type_id: FxHashMap<TypeId, &'static str>,
 }
 impl ActionRegistry {
-  pub fn new() -> Self {
+  pub(crate) fn new() -> Self {
     let mut this = Self {
       by_name: Default::default(),
       names: Default::default(),
@@ -159,7 +159,7 @@ impl ActionRegistry {
     self.names.push(name);
   }
 
-  pub fn get_by_name(&self, name: &str) -> Box<dyn Action> {
+  pub(crate) fn get_by_name(&self, name: &str) -> Box<dyn Action> {
     self
       .by_name
       .get(name)

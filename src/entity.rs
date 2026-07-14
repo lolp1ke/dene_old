@@ -10,13 +10,13 @@ use std::{
 use parking_lot::RwLock;
 use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
-use crate::{App, AppContext, Context};
+use crate::{AnyView, App, AppContext, Context, Element, IntoElement, Render};
 
 new_key_type! {
   pub struct EntityId;
 }
 
-#[derive(Debug)]
+#[derive(derive_more::Debug)]
 #[derive(derive_more::Deref, derive_more::DerefMut)]
 pub struct Entity<T> {
   #[deref]
@@ -59,6 +59,16 @@ impl<T> Clone for Entity<T> {
       any: self.any.clone(),
       ty: self.ty,
     }
+  }
+}
+impl<V> IntoElement for Entity<V>
+where
+  V: 'static + Render,
+{
+  type Element = AnyView;
+
+  fn into_element(self) -> Self::Element {
+    self.into()
   }
 }
 

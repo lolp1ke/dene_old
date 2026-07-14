@@ -9,6 +9,28 @@ use crate::Keystroke;
 pub enum PlatformInput {
   KeyDown(KeyDownEvent),
   KeyUp(KeyUpEvent),
+  MouseButtonDown(()),
+  MouseButtonUp(()),
+  MouseMove(()),
+}
+impl PlatformInput {
+  pub(crate) fn keyboard_event(&self) -> Option<&dyn Any> {
+    match self {
+      Self::KeyDown(event) => Some(event),
+      Self::KeyUp(event) => Some(event),
+      Self::MouseButtonDown(..)
+      | Self::MouseButtonUp(..)
+      | Self::MouseMove(..) => None,
+    }
+  }
+  pub(crate) fn mouse_event(&self) -> Option<&dyn Any> {
+    match self {
+      Self::KeyDown(..) | Self::KeyUp(..) => None,
+      Self::MouseButtonDown(event) => Some(event),
+      Self::MouseButtonUp(event) => Some(event),
+      Self::MouseMove(event) => Some(event),
+    }
+  }
 }
 impl InputEvent for PlatformInput {
   fn to_platform_event(self) -> PlatformInput {

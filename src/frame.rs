@@ -1,34 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::Color;
+use crate::{Color, DispatchTree};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Frame {
   cells: Vec<FrameCell>,
   pub(crate) width: u16,
   pub(crate) height: u16,
+
+  pub(crate) dispatch_tree: DispatchTree,
 }
 impl Frame {
-  pub fn new(width: u16, height: u16) -> Self {
+  pub(crate) fn new(
+    width: u16,
+    height: u16,
+    dispatch_tree: DispatchTree,
+  ) -> Self {
     let len = (width as usize) * (height as usize);
     Self {
       cells: vec![Default::default(); len],
       width,
       height,
+      dispatch_tree,
     }
   }
 
-  pub fn size(&self) -> (u16, u16) {
+  pub(crate) fn size(&self) -> (u16, u16) {
     (self.width, self.height)
   }
 
-  pub fn clear(&mut self) {
+  pub(crate) fn clear(&mut self) {
     for cell in &mut self.cells {
       *cell = Default::default();
     }
   }
 
-  pub fn resize(&mut self, width: u16, height: u16) {
+  pub(crate) fn resize(&mut self, width: u16, height: u16) {
     self.width = width;
     self.height = height;
     let len = (width as usize) * (height as usize);
@@ -37,14 +44,14 @@ impl Frame {
     self.clear();
   }
 
-  pub fn set_cell(&mut self, x: u16, y: u16, cell: FrameCell) {
+  pub(crate) fn set_cell(&mut self, x: u16, y: u16, cell: FrameCell) {
     if x < self.width && y < self.height {
       let idx = (y as usize) * (self.width as usize) + (x as usize);
       self.cells[idx] = cell;
     }
   }
 
-  pub fn get_cell(&self, x: u16, y: u16) -> &FrameCell {
+  pub(crate) fn get_cell(&self, x: u16, y: u16) -> &FrameCell {
     if x < self.width && y < self.height {
       let idx = (y as usize) * (self.width as usize) + (x as usize);
       &self.cells[idx]
@@ -62,7 +69,7 @@ impl Frame {
     }
   }
 
-  pub fn write_string(
+  pub(crate) fn write_string(
     &mut self,
     x: u16,
     y: u16,
@@ -87,7 +94,7 @@ impl Frame {
     }
   }
 
-  pub fn diff(&self, other: &Self) -> Vec<DrawOp> {
+  pub(crate) fn diff(&self, other: &Self) -> Vec<DrawOp> {
     let mut ops = Vec::new();
     for y in 0..self.height.min(other.height) {
       for x in 0..self.width.min(other.width) {
@@ -108,10 +115,10 @@ impl Frame {
 
 #[derive(Debug, Clone)]
 #[derive(PartialEq)]
-pub struct FrameCell {
-  pub symbol: String,
-  pub fg: Color,
-  pub bg: Color,
+pub(crate) struct FrameCell {
+  pub(crate) symbol: String,
+  pub(crate) fg: Color,
+  pub(crate) bg: Color,
 }
 impl Default for FrameCell {
   fn default() -> Self {
@@ -127,7 +134,7 @@ impl Default for FrameCell {
   }
 }
 #[derive(Debug, Clone)]
-pub enum DrawOp {
+pub(crate) enum DrawOp {
   Cell { x: u16, y: u16, cell: FrameCell },
   Flush,
 }

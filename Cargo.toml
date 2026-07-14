@@ -47,7 +47,13 @@ derive_more = [
 futures-util = ["futures-util/alloc"]
 rustc-hash = ["rustc-hash/std"]
 serde = ["serde/derive", "serde/std"]
-taffy = ["taffy/taffy_tree", "taffy/flexbox", "taffy/block_layout", "taffy/grid", "taffy/std"]
+taffy = [
+  "taffy/taffy_tree",
+  "taffy/flexbox",
+  "taffy/block_layout",
+  "taffy/grid",
+  "taffy/std",
+]
 tokio = [
   "tokio/sync",
   "tokio/time",
@@ -66,6 +72,7 @@ derive_more = { version = "2.1.1", default-features = false }
 futures-util = { version = "0.3.32", default-features = false }
 inventory = { version = "0.3.24", default-features = false }
 parking_lot = { version = "0.12.5", default-features = false }
+ropey = { version = "1.6.1", default-features = false }
 rustc-hash = { version = "2.1.2", default-features = false }
 serde = { version = "1.0.228", default-features = false }
 slotmap = { version = "1.1.1", default-features = false }

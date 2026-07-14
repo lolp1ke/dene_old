@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{any::Any, fmt::Debug};
+use std::{
+  any::{Any, TypeId},
+  fmt::Debug,
+};
 
-use crate::{App, Frame, KeyDownEvent, KeyUpEvent, Rect, Window};
+use crate::{
+  Action, App, DispatchPhase, Entity, FocusHandle, Frame,
+  KeyBindingContextPredicate, KeyContext, KeyDownEvent, KeyUpEvent, Rect,
+  Window,
+};
 
 pub trait IntoElement: Sized + Debug {
   type Element: Element;
@@ -40,33 +47,7 @@ pub trait Element: 'static + IntoElement {
 }
 
 #[derive(Debug)]
-pub struct AnyElement(pub Box<dyn ElementObject>);
-impl AnyElement {
-  pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
-  where
-    T: 'static,
-  {
-    self.0.as_any_mut().downcast_mut::<T>()
-  }
-  // pub fn layout_style(&self) -> taffy::Style {
-  //   self.0.layout_style()
-  // }
-  // pub fn child_count(&self) -> usize {
-  //   self.0.child_count()
-  // }
-  // pub fn get_child(&mut self, index: usize) -> &mut AnyElement {
-  //   self.0.get_child(index)
-  // }
-  // pub fn render(
-  //   &mut self,
-  //   bounds: Rect,
-  //   frame: &mut Frame,
-  //   window: &mut Window,
-  //   cx: &mut App,
-  // ) {
-  //   self.0.render(bounds, frame, window, cx);
-  // }
-}
+pub struct AnyElement(pub(crate) Box<dyn ElementObject>);
 impl Element for AnyElement {
   fn layout_style(&self) -> taffy::Style {
     self.0.layout_style()
@@ -95,7 +76,7 @@ impl IntoElement for AnyElement {
 }
 
 #[derive(Debug)]
-pub struct DrawableObject<E>
+pub(crate) struct DrawableObject<E>
 where
   E: Element,
 {
@@ -105,7 +86,7 @@ impl<E> DrawableObject<E>
 where
   E: Element,
 {
-  pub fn new(element: E) -> Self {
+  pub(crate) fn new(element: E) -> Self {
     Self { element }
   }
 }
@@ -137,7 +118,7 @@ where
   }
 }
 
-pub trait ElementObject {
+pub(crate) trait ElementObject {
   fn as_any_mut(&mut self) -> &mut dyn Any;
 
   fn layout_style(&self) -> taffy::Style {
@@ -168,27 +149,55 @@ impl Debug for dyn ElementObject {
 pub trait InteractiveElement: Sized {
   fn interactivity(&mut self) -> &mut Interactivity;
 
+  fn on_action<A, F>(mut self, listener: F) -> Self
+  where
+    A: Action,
+    F: 'static + Fn(&A, &mut Window, &mut App),
+  {
+    self.interactivity().action_listeners.push((
+      TypeId::of::<A>(),
+      Box::new(move |action, phase, window, cx| {
+        let action = action.downcast_ref::<A>().unwrap();
+        if phase == DispatchPhase::Bubble {
+          (listener)(action, window, cx);
+        };
+      }),
+    ));
+    self
+  }
+
   fn on_key_down<F>(mut self, listener: F) -> Self
   where
     F: 'static + Fn(&KeyDownEvent, &mut Window, &mut App),
   {
-    self
-      .interactivity()
-      .key_down_listeners
-      .push(Box::new(listener));
+    self.interactivity().key_down_listeners.push(Box::new(
+      move |event, phase, window, cx| {
+        if phase == DispatchPhase::Bubble {
+          (listener)(event, window, cx);
+        };
+      },
+    ));
     self
   }
   fn on_key_up<F>(mut self, listener: F) -> Self
   where
     F: 'static + Fn(&KeyUpEvent, &mut Window, &mut App),
   {
-    self
-      .interactivity()
-      .key_up_listeners
-      .push(Box::new(listener));
+    self.interactivity().key_up_listeners.push(Box::new(
+      move |event, phase, window, cx| {
+        if phase == DispatchPhase::Bubble {
+          (listener)(event, window, cx);
+        };
+      },
+    ));
     self
   }
 
+  fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+    self.interactivity().focusable = true;
+    self.interactivity().focus_handle = Some(focus_handle.clone());
+    self
+  }
   fn tab_index(mut self, tab_index: u32) -> Self {
     self.interactivity().focusable = true;
     self.interactivity().tab_stop = true;
@@ -199,12 +208,19 @@ pub trait InteractiveElement: Sized {
     self.interactivity().tab_stop = tab_stop;
     self
   }
+
+  fn key_context(mut self, context: KeyContext) -> Self {
+    self.interactivity().key_context = Some(context);
+    self
+  }
 }
 
+type ActionListener =
+  Box<dyn 'static + Fn(&dyn Any, DispatchPhase, &mut Window, &mut App)>;
 type KeyDownListener =
-  Box<dyn 'static + Fn(&KeyDownEvent, &mut Window, &mut App)>;
-
-type KeyUpListener = Box<dyn 'static + Fn(&KeyUpEvent, &mut Window, &mut App)>;
+  Box<dyn 'static + Fn(&KeyDownEvent, DispatchPhase, &mut Window, &mut App)>;
+type KeyUpListener =
+  Box<dyn 'static + Fn(&KeyUpEvent, DispatchPhase, &mut Window, &mut App)>;
 
 #[derive(derive_more::Debug)]
 #[derive(Default)]
@@ -216,13 +232,19 @@ pub struct Interactivity {
   #[debug(skip)]
   pub base_style: Box<taffy::Style>,
 
+  pub focus_handle: Option<FocusHandle>,
   pub tab_index: Option<u32>,
   pub tab_stop: bool,
+
+  #[debug(skip)]
+  pub action_listeners: Vec<(TypeId, ActionListener)>,
 
   #[debug(skip)]
   pub key_down_listeners: Vec<KeyDownListener>,
   #[debug(skip)]
   pub key_up_listeners: Vec<KeyUpListener>,
+
+  pub key_context: Option<KeyContext>,
 }
 impl Interactivity {
   pub(crate) fn apply_keyboard_listeners(
@@ -230,18 +252,47 @@ impl Interactivity {
     window: &mut Window,
     _cx: &mut App,
   ) {
+    if let Some(context) = self.key_context.take() {
+      // window.set_key_context(context);
+    }
+
     let key_down_listeners = std::mem::take(&mut self.key_down_listeners);
     for listener in key_down_listeners.into_iter() {
-      window.on_key_event(move |event: &KeyDownEvent, window, cx| {
-        (listener)(event, window, cx);
+      window.on_key_event(move |event: &KeyDownEvent, phase, window, cx| {
+        (listener)(event, phase, window, cx);
       });
     }
 
     let key_up_listeners = std::mem::take(&mut self.key_up_listeners);
     for listener in key_up_listeners.into_iter() {
-      window.on_key_event(move |event: &KeyUpEvent, window, cx| {
-        (listener)(event, window, cx);
+      window.on_key_event(move |event: &KeyUpEvent, phase, window, cx| {
+        (listener)(event, phase, window, cx);
       });
+    }
+
+    let action_listeners = std::mem::take(&mut self.action_listeners);
+    for (action_ty, listener) in action_listeners.into_iter() {
+      window.on_action(action_ty, listener);
     }
   }
 }
+
+pub trait ElementExt {
+  fn map<F, R>(self, f: F) -> R
+  where
+    Self: Sized,
+    F: FnOnce(Self) -> R,
+  {
+    f(self)
+  }
+
+  fn when<F>(self, condition: bool, f: F) -> Self
+  where
+    Self: Sized,
+    F: FnOnce(Self) -> Self,
+  {
+    self.map(|this| if condition { f(this) } else { this })
+  }
+}
+
+impl<T: IntoElement> ElementExt for T {}

@@ -28,7 +28,7 @@ impl Keybinds {
 pub struct Keybind {
   pub(crate) action: Box<dyn Action>,
   pub(crate) keystrokes: SmallVec<[Keystroke; 2]>,
-  pub(crate) key_context: Option<Rc<KeyContext>>,
+  pub(crate) key_context: Option<Rc<KeyBindingContextPredicate>>,
 }
 
 #[derive(Debug)]
@@ -155,7 +155,7 @@ bitflags! {
 
 #[derive(Debug)]
 #[derive(Clone)]
-pub enum KeyContext {
+pub enum KeyBindingContextPredicate {
   Ident(Arc<str>),
   Eq(Arc<str>, Arc<str>),
   NEq(Arc<str>, Arc<str>),
@@ -163,7 +163,38 @@ pub enum KeyContext {
   And(Box<Self>, Box<Self>),
   Or(Box<Self>, Box<Self>),
 }
-impl KeyContext {
+impl KeyBindingContextPredicate {
+  pub fn eval(&self, path: &[KeyBindingContextPredicate]) -> bool {
+    match self {
+      Self::Ident(name) => path.iter().any(|ctx| match ctx {
+        Self::Ident(n) => n == name,
+        _ => false,
+      }),
+      Self::Eq(key, value) => path.iter().any(|ctx| match ctx {
+        Self::Eq(k, v) => k == key && v == value,
+        _ => false,
+      }),
+      Self::NEq(key, value) => !path.iter().any(|ctx| match ctx {
+        Self::Eq(k, v) => k == key && v == value,
+        _ => false,
+      }),
+      Self::Not(inner) => !inner.eval(path),
+      Self::And(a, b) => a.eval(path) && b.eval(path),
+      Self::Or(a, b) => a.eval(path) || b.eval(path),
+    }
+  }
+
+  pub fn depth_of(&self, path: &[KeyBindingContextPredicate]) -> Option<usize> {
+    let mut result = None;
+    for (i, _) in path.iter().enumerate() {
+      let sub = &path[..=i];
+      if self.eval(sub) {
+        result = Some(i);
+      }
+    }
+    result
+  }
+
   fn parse(source: &str) -> anyhow::Result<Self> {
     let source = remove_whitespace(source);
     let (context, rest) = Self::parse_expr(source, 0)?;
@@ -176,7 +207,10 @@ impl KeyContext {
     mut source: &str,
     min_precedence: u32,
   ) -> anyhow::Result<(Self, &str)> {
-    type Op = fn(KeyContext, KeyContext) -> anyhow::Result<KeyContext>;
+    type Op = fn(
+      KeyBindingContextPredicate,
+      KeyBindingContextPredicate,
+    ) -> anyhow::Result<KeyBindingContextPredicate>;
 
     let (mut lhs, rest) = Self::parse_primary(source)?;
     source = rest;
@@ -279,11 +313,12 @@ impl KeybindsFile {
     for KeybindsFileSection { context, bindings } in
       keymap_file.keybindings.iter()
     {
-      let context_predicate: Option<Rc<KeyContext>> = if context.is_empty() {
-        None
-      } else {
-        Some(Rc::new(KeyContext::parse(context)?))
-      };
+      let context_predicate: Option<Rc<KeyBindingContextPredicate>> =
+        if context.is_empty() {
+          None
+        } else {
+          Some(Rc::new(KeyBindingContextPredicate::parse(context)?))
+        };
 
       for (keystrokes, action) in bindings {
         let (action_name, _) = Self::parse_action(action)?;
@@ -325,4 +360,47 @@ pub struct KeybindsFileSection {
   #[serde(default)]
   context: String,
   bindings: HashMap<String, toml::Value>,
+}
+
+#[derive(Debug)]
+#[derive(Default)]
+#[derive(Clone)]
+pub struct KeyContext(Vec<KeyContextEntry>);
+impl KeyContext {
+  pub fn new() -> Self {
+    let mut this = Self::default();
+    this
+  }
+
+  pub fn contains(&self, key: &str) -> bool {
+    self.0.iter().any(|entry| entry.key.as_ref() == key)
+  }
+  pub fn set<K, V>(&mut self, key: K, value: V)
+  where
+    K: Into<Arc<str>>,
+    V: Into<Arc<str>>,
+  {
+    let key = key.into();
+    if !self.contains(&key) {
+      self.0.push(KeyContextEntry {
+        key,
+        value: Some(value.into()),
+      });
+    };
+  }
+  pub fn get(&self, key: &str) -> Option<Arc<str>> {
+    self
+      .0
+      .iter()
+      .find(|entry| entry.key.as_ref() == key)?
+      .value
+      .clone()
+  }
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+pub struct KeyContextEntry {
+  key: Arc<str>,
+  value: Option<Arc<str>>,
 }

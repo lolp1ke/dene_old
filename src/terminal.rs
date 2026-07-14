@@ -20,7 +20,7 @@ impl Terminal {
     terminal::enable_raw_mode().unwrap();
     execute!(
       stdout,
-      terminal::EnterAlternateScreen,
+      // terminal::EnterAlternateScreen,
       cursor::Hide,
       terminal::Clear(ClearType::All),
     )
